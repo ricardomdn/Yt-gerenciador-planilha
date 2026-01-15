@@ -26,7 +26,13 @@ export const generateGASCode = (channelId: string, costs: CostItem[]): string =>
   const shortTotalColIndex = 5 + shortCosts.length;
 
   return `/**
- * AUTOMAÇÃO YOUTUBE PRO
+ * AUTOMAÇÃO YOUTUBE PRO - V3 (Histórico Completo)
+ * 
+ * INSTRUÇÕES:
+ * 1. No menu lateral esquerdo, clique em "Serviços" (+).
+ * 2. Selecione "YouTube Data API v3" e clique em Adicionar.
+ * 3. Salve e execute a função 'setup'.
+ *
  * Gerado em: ${new Date().toLocaleDateString('pt-BR')}
  */
 
@@ -175,18 +181,42 @@ function fetchYouTubeData() {
     let targetChannelId = resolveChannelId(CHANNEL_ID_OR_HANDLE);
     if (!targetChannelId) return;
 
-    const results = YouTube.Search.list('id,snippet', {
-      channelId: targetChannelId,
-      maxResults: 50,
-      order: 'date',
-      type: 'video'
-    });
+    // --- LÓGICA DE HISTÓRICO ---
+    // Busca até 4 páginas (200 vídeos) para garantir cobertura total do mês,
+    // mesmo para canais de Shorts com alta frequência.
+    let allSearchItems = [];
+    let nextPageToken = '';
     
-    if (results.items && results.items.length > 0) {
-      const videoIds = results.items.map(item => item.id.videoId).join(',');
-      const stats = YouTube.Videos.list('snippet,statistics,contentDetails', { id: videoIds });
-      
-      processVideos(ss, stats.items);
+    // Loop de paginação (máx 4 páginas = 200 vídeos recentes)
+    for (let i = 0; i < 4; i++) {
+        const results = YouTube.Search.list('id,snippet', {
+          channelId: targetChannelId,
+          maxResults: 50, // Limite máximo da API por requisição
+          order: 'date',
+          type: 'video',
+          pageToken: nextPageToken
+        });
+        
+        if (results.items) {
+           allSearchItems = allSearchItems.concat(results.items);
+        }
+        
+        nextPageToken = results.nextPageToken;
+        if (!nextPageToken) break; 
+    }
+    
+    if (allSearchItems.length > 0) {
+      // Processa em lotes de 50 (limite da API de Videos)
+      const chunkSize = 50;
+      for (let i = 0; i < allSearchItems.length; i += chunkSize) {
+          const chunk = allSearchItems.slice(i, i + chunkSize);
+          const videoIds = chunk.map(item => item.id.videoId).join(',');
+          
+          if (videoIds) {
+             const stats = YouTube.Videos.list('snippet,statistics,contentDetails', { id: videoIds });
+             processVideos(ss, stats.items);
+          }
+      }
     }
 
     // Atualiza os totais do Dashboard
@@ -200,6 +230,8 @@ function fetchYouTubeData() {
 }
 
 function processVideos(ss, videos) {
+  if (!videos || videos.length === 0) return;
+
   videos.forEach(video => {
       const durationSec = parseISO8601Duration(video.contentDetails.duration);
       const isShort = durationSec <= 65; 
@@ -215,6 +247,7 @@ function processVideos(ss, videos) {
       
       let existingLinks = [];
       if (hasData) {
+         // Otimização: Pega apenas os links para verificar duplicidade
          existingLinks = sheet.getRange(DATA_START_ROW, 3, lastRow - DATA_START_ROW + 1, 1).getValues().flat();
       }
       
@@ -223,7 +256,7 @@ function processVideos(ss, videos) {
       const existingIndex = existingLinks.indexOf(videoUrl);
 
       if (existingIndex === -1) {
-        // Novo vídeo
+        // --- NOVO VÍDEO (Adiciona) ---
         const rowCosts = configCosts.map(c => c.value);
         const rowData = [
           new Date(video.snippet.publishedAt),
@@ -237,7 +270,7 @@ function processVideos(ss, videos) {
         sheet.appendRow(rowData);
         const newRow = sheet.getLastRow();
         
-        // Fórmula de soma horizontal
+        // Fórmula de soma horizontal para a nova linha
         if (configCosts.length > 0) {
             const startCostLetter = columnToLetter(5);
             const endCostLetter = columnToLetter(5 + configCosts.length - 1);
@@ -249,7 +282,7 @@ function processVideos(ss, videos) {
              sheet.getRange(newRow, totalColIndex).setValue(0);
         }
       } else {
-        // Atualiza views
+        // --- VÍDEO EXISTENTE (Atualiza apenas Views) ---
         const rowToUpdate = DATA_START_ROW + existingIndex;
         sheet.getRange(rowToUpdate, 4).setValue(viewCount);
       }
