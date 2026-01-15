@@ -20,16 +20,6 @@ export const generateGASCode = (channelId: string, costs: CostItem[]): string =>
     return JSON.stringify(specificCosts.map(c => ({ role: c.role, value: c.value })), null, 2);
   };
 
-  const columnToLetter = (column: number) => {
-    let temp, letter = '';
-    while (column > 0) {
-      temp = (column - 1) % 26;
-      letter = String.fromCharCode(temp + 65) + letter;
-      column = (column - temp - 1) / 26;
-    }
-    return letter;
-  };
-
   // --- CONSTANTS ---
   const DATA_START_ROW = 5;
   const longTotalColIndex = 5 + longCosts.length;
