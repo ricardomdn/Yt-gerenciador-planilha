@@ -1,0 +1,5 @@
+{
+  "name": "YouTuber Automation Generator",
+  "description": "A web application to generate custom Google Apps Script code for YouTubers to automate video tracking and cost management in Google Sheets using the YouTube Data API.",
+  "requestFramePermissions": []
+}
