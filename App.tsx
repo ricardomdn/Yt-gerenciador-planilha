@@ -1,8 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CostItem, GeneratorState } from './types';
 import { generateGASCode } from './utils/scriptGenerator';
 
+// --- CONFIGURAÇÃO DE SEGURANÇA ---
+// Variável com nome aleatório para ofuscação básica no código fonte público.
+const __0x_BATATA_COSMICA_REF = "cadresteste123"; 
+
 const App: React.FC = () => {
+  // --- AUTH STATE ---
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [authError, setAuthError] = useState(false);
+
+  // --- APP STATE ---
   const [state, setState] = useState<GeneratorState>({
     channelId: '',
     costs: [],
@@ -15,6 +25,32 @@ const App: React.FC = () => {
 
   const [generatedCode, setGeneratedCode] = useState<string>('');
   const [copied, setCopied] = useState(false);
+
+  // Check LocalStorage on mount
+  useEffect(() => {
+    const storedAuth = localStorage.getItem('yt_auto_auth');
+    if (storedAuth === 'true') {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Verifica contra a variável "escondida"
+    if (passwordInput === __0x_BATATA_COSMICA_REF) {
+      setIsAuthenticated(true);
+      setAuthError(false);
+      localStorage.setItem('yt_auto_auth', 'true');
+    } else {
+      setAuthError(true);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('yt_auto_auth');
+    setPasswordInput("");
+  };
 
   const handleChannelIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setState(prev => ({ ...prev, channelId: e.target.value }));
@@ -66,10 +102,62 @@ const App: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // --- RENDER LOGIN SCREEN IF NOT AUTHENTICATED ---
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
+        <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-md p-8 rounded-3xl border border-slate-800 shadow-2xl">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-600 to-red-800 text-white rounded-2xl mb-4 shadow-lg shadow-red-900/40">
+              <i className="fa-solid fa-lock text-2xl"></i>
+            </div>
+            <h1 className="text-2xl font-bold text-white">Acesso Restrito</h1>
+            <p className="text-slate-400 text-sm mt-2">Ferramenta privada de automação.</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Senha de Acesso</label>
+              <input 
+                type="password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                className={`w-full px-4 py-3 bg-slate-950 border rounded-xl text-white outline-none focus:ring-2 transition-all ${authError ? 'border-red-500 focus:ring-red-500/50' : 'border-slate-700 focus:ring-red-500'}`}
+                placeholder="••••••••"
+                autoFocus
+              />
+              {authError && <p className="text-red-500 text-xs mt-2 font-medium">Senha incorreta.</p>}
+            </div>
+            <button 
+              type="submit"
+              className="w-full py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-xl shadow-lg shadow-red-900/20 transition-all transform active:scale-[0.98]"
+            >
+              Entrar
+            </button>
+          </form>
+          
+          <div className="mt-8 text-center">
+             <p className="text-slate-600 text-xs">Desenvolvido por Ricardão</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- RENDER MAIN APP ---
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
+    <div className="max-w-4xl mx-auto px-4 py-12 relative">
+      
+      {/* Logout Button (Absolute Top Right) */}
+      <button 
+        onClick={handleLogout}
+        className="absolute top-4 right-4 text-slate-500 hover:text-white text-xs font-medium uppercase tracking-wider transition-colors flex items-center gap-2 px-3 py-1 rounded-full border border-transparent hover:border-slate-700"
+      >
+        <i className="fa-solid fa-arrow-right-from-bracket"></i> Sair
+      </button>
+
       {/* Header */}
-      <header className="text-center mb-12">
+      <header className="text-center mb-12 pt-8">
         <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-red-600 to-red-800 text-white rounded-2xl mb-6 shadow-2xl shadow-red-900/50 transform hover:scale-105 transition-transform duration-300">
           <i className="fa-brands fa-youtube text-4xl drop-shadow-md"></i>
         </div>
