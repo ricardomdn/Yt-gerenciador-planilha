@@ -26,7 +26,7 @@ export const generateGASCode = (channelId: string, costs: CostItem[]): string =>
   const shortTotalColIndex = 5 + shortCosts.length;
 
   return `/**
- * AUTOMAÇÃO YOUTUBE PRO - V3 (Histórico Completo)
+ * AUTOMAÇÃO YOUTUBE PRO - V6 (Forçar Atualização Geral)
  * 
  * INSTRUÇÕES:
  * 1. No menu lateral esquerdo, clique em "Serviços" (+).
@@ -182,16 +182,14 @@ function fetchYouTubeData() {
     if (!targetChannelId) return;
 
     // --- LÓGICA DE HISTÓRICO ---
-    // Busca até 4 páginas (200 vídeos) para garantir cobertura total do mês,
-    // mesmo para canais de Shorts com alta frequência.
     let allSearchItems = [];
     let nextPageToken = '';
     
-    // Loop de paginação (máx 4 páginas = 200 vídeos recentes)
+    // Busca até 4 páginas (200 vídeos)
     for (let i = 0; i < 4; i++) {
         const results = YouTube.Search.list('id,snippet', {
           channelId: targetChannelId,
-          maxResults: 50, // Limite máximo da API por requisição
+          maxResults: 50,
           order: 'date',
           type: 'video',
           pageToken: nextPageToken
@@ -206,7 +204,7 @@ function fetchYouTubeData() {
     }
     
     if (allSearchItems.length > 0) {
-      // Processa em lotes de 50 (limite da API de Videos)
+      // Processa em lotes de 50
       const chunkSize = 50;
       for (let i = 0; i < allSearchItems.length; i += chunkSize) {
           const chunk = allSearchItems.slice(i, i + chunkSize);
@@ -219,6 +217,15 @@ function fetchYouTubeData() {
       }
     }
 
+    // --- ORDENAÇÃO ---
+    sortSheetByDate(ss.getSheetByName(SHEET_LONG));
+    sortSheetByDate(ss.getSheetByName(SHEET_SHORTS));
+
+    // --- FORÇAR ATUALIZAÇÃO GERAL DE CUSTOS ---
+    // Isso garante que vídeos antigos, não pegos na busca da API, também recebam o novo preço
+    forceUpdateSheetCosts(ss.getSheetByName(SHEET_LONG), COSTS_LONG);
+    forceUpdateSheetCosts(ss.getSheetByName(SHEET_SHORTS), COSTS_SHORTS);
+
     // Atualiza os totais do Dashboard
     updateDashboardTotals(ss);
     
@@ -227,6 +234,53 @@ function fetchYouTubeData() {
   } catch (e) {
     Logger.log("Erro: " + e.toString());
   }
+}
+
+function forceUpdateSheetCosts(sheet, configCosts) {
+  if (!sheet) return;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START_ROW) return;
+
+  const numRows = lastRow - DATA_START_ROW + 1;
+  const costValues = configCosts.map(c => c.value);
+  const numCosts = costValues.length;
+
+  if (numCosts > 0) {
+    // Cria uma matriz repetindo os valores de custo para todas as linhas
+    const costsMatrix = [];
+    const formulasMatrix = [];
+
+    const startCostLetter = columnToLetter(5);
+    const endCostLetter = columnToLetter(5 + numCosts - 1);
+
+    for (let r = 0; r < numRows; r++) {
+       costsMatrix.push(costValues);
+       const currentRow = DATA_START_ROW + r;
+       // Reconstrói a fórmula de soma para garantir consistência
+       formulasMatrix.push(["=SUM(" + startCostLetter + currentRow + ":" + endCostLetter + currentRow + ")"]);
+    }
+
+    // Sobrescreve as colunas de custo (Col 5 em diante) para TODAS as linhas existentes
+    sheet.getRange(DATA_START_ROW, 5, numRows, numCosts).setValues(costsMatrix);
+
+    // Sobrescreve a coluna de Total
+    sheet.getRange(DATA_START_ROW, 5 + numCosts, numRows, 1).setFormulas(formulasMatrix);
+  } else {
+     // Se não houver custos, zera a coluna 5
+     sheet.getRange(DATA_START_ROW, 5, numRows, 1).setValue(0);
+  }
+}
+
+function sortSheetByDate(sheet) {
+  if (!sheet) return;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START_ROW) return;
+  
+  const lastCol = sheet.getLastColumn();
+  const numRows = lastRow - DATA_START_ROW + 1;
+  
+  const range = sheet.getRange(DATA_START_ROW, 1, numRows, lastCol);
+  range.sort({column: 1, ascending: true});
 }
 
 function processVideos(ss, videos) {
@@ -247,7 +301,6 @@ function processVideos(ss, videos) {
       
       let existingLinks = [];
       if (hasData) {
-         // Otimização: Pega apenas os links para verificar duplicidade
          existingLinks = sheet.getRange(DATA_START_ROW, 3, lastRow - DATA_START_ROW + 1, 1).getValues().flat();
       }
       
@@ -256,7 +309,7 @@ function processVideos(ss, videos) {
       const existingIndex = existingLinks.indexOf(videoUrl);
 
       if (existingIndex === -1) {
-        // --- NOVO VÍDEO (Adiciona) ---
+        // --- NOVO VÍDEO ---
         const rowCosts = configCosts.map(c => c.value);
         const rowData = [
           new Date(video.snippet.publishedAt),
@@ -270,7 +323,6 @@ function processVideos(ss, videos) {
         sheet.appendRow(rowData);
         const newRow = sheet.getLastRow();
         
-        // Fórmula de soma horizontal para a nova linha
         if (configCosts.length > 0) {
             const startCostLetter = columnToLetter(5);
             const endCostLetter = columnToLetter(5 + configCosts.length - 1);
@@ -283,6 +335,7 @@ function processVideos(ss, videos) {
         }
       } else {
         // --- VÍDEO EXISTENTE (Atualiza apenas Views) ---
+        // OBS: A atualização de custos agora é feita em massa no final pelo forceUpdateSheetCosts
         const rowToUpdate = DATA_START_ROW + existingIndex;
         sheet.getRange(rowToUpdate, 4).setValue(viewCount);
       }
